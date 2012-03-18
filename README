@@ -1,0 +1,1 @@
+Proximity Dress is an interactive wearable electronics project. The system consists of two XBee modules - one is sewn into the wearer's dress and the other is mounted on a standalone Arduino-based controller. Each module is connected to a number of LEDs which light up according to the signal strength between the two modules.
