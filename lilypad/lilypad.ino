@@ -25,7 +25,13 @@ int INNER_LED_PIN = 8;
 int MIDDLE_LED_PIN = 9;
 int OUTER_LED_PIN = 10;
 
-int JUMP = 75;
+int ledPins[] = {INNER_LED_PIN, MIDDLE_LED_PIN, OUTER_LED_PIN, -1};
+int numPins = 0;
+
+unsigned long signal_value = 0;
+
+int MAX_SIGNAL_VALUE = 255;
+int QUANTUM = 20;
 
 SoftwareSerial XBee(5,6);
 
@@ -45,19 +51,35 @@ void loop() {
     Serial.println(XBee.read());
     
     unsigned long rssi_counts = pulseIn(RSSI_PIN, HIGH);
-    setPrettyLights(rssi_counts);
+    signal_value = rssi_counts;
+    lightThings();
   }
 }
 
-/*
- We need to PWM (i.e. PWN) that shit.
- */
-void setPrettyLights(unsigned long howMuch) {
-  Serial.print("yayyyyyyyy ");
-  Serial.println(howMuch);
-  
-  analogWrite(INNER_LED_PIN, (howMuch - JUMP*2)*3);
-  analogWrite(MIDDLE_LED_PIN, (howMuch - JUMP)*1.5);
-  analogWrite(OUTER_LED_PIN, howMuch);
+/* from led_test */
+void lightThings() {
+  float numPinsToLight = numPins * (signal_value / (1.0 * MAX_SIGNAL_VALUE));
+  int numFullPins = (int)numPinsToLight;
+  float lastPinBrightness = numPinsToLight - numFullPins;
+  int i = 0;
+  for (; i < numFullPins; i++) {
+    digitalWrite(ledPins[i], HIGH);
+  }
+  if (lastPinBrightness > 0.0) {
+    pwm(ledPins[i], lastPinBrightness);
+    i++; 
+  }
+  for (; i < numPins; i++) {
+    digitalWrite(ledPins[i], LOW); 
+  }
+}
+
+void pwm(int pin, float brightness) {
+  int pulseOn = max(1, (int)(QUANTUM * brightness));
+  int pulseOff = QUANTUM - pulseOn;
+  digitalWrite(pin, HIGH);
+  delay(pulseOn);
+  digitalWrite(pin, LOW);
+  delay(pulseOff);
 }
 
