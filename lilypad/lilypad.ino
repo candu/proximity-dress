@@ -47,7 +47,7 @@ void setup() {
   pinMode(RSSI_PIN, INPUT);
  
   for (numPins = 0; ledPins[numPins] != -1; numPins++) {
-    pinMode(ledPins[i], OUTPUT);
+    pinMode(ledPins[numPins], OUTPUT);
   }
 
   pinMode(BOARD_LED_PIN, OUTPUT);
@@ -57,9 +57,9 @@ void loop() {
   if (!XBee.available()) {
     return;
   }
-  int c = XBee.read();
+  char c = char(XBee.read());
   Serial.println(c);
-  if (c != "!") {
+  if (c != '!') {
     return;
   }
   unsigned long rssiCounts = pulseIn(RSSI_PIN, HIGH, RSSI_TIMEOUT);
@@ -88,7 +88,7 @@ float getSignalValue(unsigned long rssiCounts) {
  */
 void lightThings(float strength) {
   float numPinsToLight = numPins * strength;
-  int numFullPins = (int)numPinsToLight;
+  int numFullPins = int(numPinsToLight);
   float lastPinBrightness = numPinsToLight - numFullPins;
   int i = 0;
   for (; i < numFullPins; i++) {
@@ -102,7 +102,7 @@ void lightThings(float strength) {
 }
 
 void pwm(int pin, float brightness) {
-  int pulseOn = (int)(QUANTUM * brightness);
+  int pulseOn = int(QUANTUM * brightness);
   int pulseOff = QUANTUM - pulseOn;
   digitalWrite(pin, HIGH);
   microDelay(pulseOn);
