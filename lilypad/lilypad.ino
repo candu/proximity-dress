@@ -5,13 +5,14 @@
 
  The hookups:
  
- XBee pin 6 -> Lilypad pin 7
- XBee RX    -> Lilypad 5
- XBee TX    -> Lilypad 6
  XBee +     -> Lilypad +
  XBee -     -> Lilypad -
- 
- LED string -> one each on Lilypad 8, 9, 10
+ XBee TX    -> Lilypad pin 5
+ XBee RX    -> Lilypad pin 6
+ XBee RSSI  -> Lilypad pin 7
+ LED inner  -> Lilypad pin 8
+ LED mid    -> Lilypad pin 9
+ LED outer  -> Lilypad pin 10
  
  for XBee:
  
@@ -20,66 +21,91 @@
  
 */
 
+int RX_FROM_XBEE_PIN = 5;
+int TX_TO_XBEE_PIN = 6;
 int RSSI_PIN = 7;
 int INNER_LED_PIN = 8;
 int MIDDLE_LED_PIN = 9;
 int OUTER_LED_PIN = 10;
+int BOARD_LED_PIN = 13;
+
+int RSSI_TIMEOUT = 200;     /* us */
+int QUANTUM = 20000;        /* us */
 
 int ledPins[] = {INNER_LED_PIN, MIDDLE_LED_PIN, OUTER_LED_PIN, -1};
 int numPins = 0;
 
-unsigned long signal_value = 0;
+float strength = 0.0;
+float STRENGTH_DECAY = 0.85;
 
-int MAX_SIGNAL_VALUE = 255;
-int QUANTUM = 20;
-
-SoftwareSerial XBee(5,6);
+SoftwareSerial XBee(RX_FROM_XBEE_PIN, TX_TO_XBEE_PIN);
 
 void setup() {
   Serial.begin(9600);
   XBee.begin(9600);
   
   pinMode(RSSI_PIN, INPUT);
-  
-  pinMode(INNER_LED_PIN, OUTPUT);
-  pinMode(MIDDLE_LED_PIN, OUTPUT);
-  pinMode(OUTER_LED_PIN, OUTPUT);
+ 
+  for (numPins = 0; ledPins[numPins] != -1; numPins++) {
+    pinMode(ledPins[i], OUTPUT);
+  }
+
+  pinMode(BOARD_LED_PIN, OUTPUT);
 }
 
 void loop() {
-  if (XBee.available()) {
-    Serial.println(XBee.read());
-    
-    unsigned long rssi_counts = pulseIn(RSSI_PIN, HIGH);
-    signal_value = rssi_counts;
-    lightThings();
+  if (!XBee.available()) {
+    return;
   }
+  int c = XBee.read();
+  Serial.println(c);
+  if (c != "!") {
+    return;
+  }
+  unsigned long rssiCounts = pulseIn(RSSI_PIN, HIGH, RSSI_TIMEOUT);
+  float curSignalValue = getSignalValue(rssiCounts);
+  lightThings(curSignalValue);
 }
 
-/* from led_test */
-void lightThings() {
-  float numPinsToLight = numPins * (signal_value / (1.0 * MAX_SIGNAL_VALUE));
+/**
+ * According to the Arduino docs, delayMicroseconds() is inaccurate for
+ * large input values. We work around that by using delay() as well.
+ */
+void microDelay(int us) {
+  delay(us / 1000);
+  delayMicroseconds(us % 1000);
+}
+
+float getSignalValue(unsigned long rssiCounts) {
+  // TODO: implement this
+  return 0.666;
+}
+
+/**
+ * This function lights up the pins listed in ledPins according to the
+ * current signal strength. It will PWM exactly one of them, possibly at
+ * zero brightness, to force a one-QUANTUM delay.
+ */
+void lightThings(float strength) {
+  float numPinsToLight = numPins * strength;
   int numFullPins = (int)numPinsToLight;
   float lastPinBrightness = numPinsToLight - numFullPins;
   int i = 0;
   for (; i < numFullPins; i++) {
     digitalWrite(ledPins[i], HIGH);
   }
-  if (lastPinBrightness > 0.0) {
-    pwm(ledPins[i], lastPinBrightness);
-    i++; 
-  }
+  pwm(ledPins[i], lastPinBrightness);
+  i++; 
   for (; i < numPins; i++) {
     digitalWrite(ledPins[i], LOW); 
   }
 }
 
 void pwm(int pin, float brightness) {
-  int pulseOn = max(1, (int)(QUANTUM * brightness));
+  int pulseOn = (int)(QUANTUM * brightness);
   int pulseOff = QUANTUM - pulseOn;
   digitalWrite(pin, HIGH);
-  delay(pulseOn);
+  microDelay(pulseOn);
   digitalWrite(pin, LOW);
-  delay(pulseOff);
+  microDelay(pulseOff);
 }
-
