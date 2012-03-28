@@ -63,6 +63,7 @@ void loop() {
     return;
   }
   unsigned long rssiCounts = pulseIn(RSSI_PIN, HIGH, RSSI_TIMEOUT);
+  Serial.println('rssiCounts == ' + rssiCounts);
   float curSignalValue = getSignalValue(rssiCounts);
   lightThings(curSignalValue);
 }
