@@ -17,7 +17,7 @@
  for XBee:
  
  P0 -> 1   (enable RSSI/PWM)
- RP -> 5   (set how long the RSSI analog signal lasts;; hex * 100ms)
+ RP -> FF  (RSSI analog signal is always on)
  
 */
 
@@ -34,15 +34,17 @@ int BOARD_LED_PIN = 13;
  * cycle lengths here. This avoids pulseIn() default behavior which is
  * to wait (and block!) for up to a second.
  */
-int RSSI_TIMEOUT = 25000;   /* us */
-int QUANTUM = 20000;        /* us */
-int LOOP_QUANTUM = 500;     /* ms */
+int RSSI_TIMEOUT = 25000;     /* us */
+int RSSI_T_PWM = 8320;        /* us */
+int QUANTUM = 20000;          /* us */
+int LOOP_QUANTUM = 500;       /* ms */
+
+float STRENGTH_DECAY = 0.85;  /* [0, 1] */
 
 int ledPins[] = {INNER_LED_PIN, MIDDLE_LED_PIN, OUTER_LED_PIN, -1};
 int numPins = 0;
 
 float strength = 0.0;
-float STRENGTH_DECAY = 0.85;
 
 SoftwareSerial XBee(RX_FROM_XBEE_PIN, TX_TO_XBEE_PIN);
 
@@ -59,28 +61,50 @@ void setup() {
   pinMode(BOARD_LED_PIN, OUTPUT);
 }
 
-void executeLoop() {
+void debugRssi(
+    unsigned long rssiCounts,
+    float curdBm,
+    float curSignalValue,
+    float curStrength) {
+  Serial.print("(");
+  Serial.print(millis());
+  Serial.print(", ");
+  Serial.print(rssiCounts);
+  Serial.print(", ");
+  Serial.print(curdBm);
+  Serial.print(", ");
+  Serial.print(curSignalValue);
+  Serial.print(", ");
+  Serial.print(curStrength);
+  Serial.println(")");
+}
+
+boolean executeLoop() {
   if (XBee.available() == 0) {
-    return;
+    return false;
   }
   char c = char(XBee.read());
   if (c != '!') {
-    return;
+    return false;
   }
   unsigned long rssiCounts = pulseIn(RSSI_PIN, HIGH, RSSI_TIMEOUT);
-  Serial.print("[");
-  Serial.print(millis());
-  Serial.print("] ");
-  Serial.println(rssiCounts);
-  float curSignalValue = getSignalValue(rssiCounts);
+  float curdBm = dBm(rssiCounts);
+  float curSignalValue = getSignalValue(curdBm);
   strength =
       STRENGTH_DECAY * strength +
       (1.0 - STRENGTH_DECAY) * curSignalValue;
+  debugRssi(rssiCounts, curdBm, curSignalValue, strength);
+  return true;
 }
 
 void loop() {
   unsigned long start = millis();
-  executeLoop();
+  boolean receivedPing = executeLoop();
+  if (receivedPing) {
+    digitalWrite(BOARD_LED_PIN, HIGH);
+  } else {
+    digitalWrite(BOARD_LED_PIN, LOW); 
+  }
   while (millis() - start < LOOP_QUANTUM) {
     lightThings(strength);
   }
@@ -95,8 +119,13 @@ void microDelay(int us) {
   delayMicroseconds(us % 1000);
 }
 
-float getSignalValue(unsigned long rssiCounts) {
-  // TODO: implement this
+float dBm(unsigned long rssiCounts) {
+  float pwmRatio = 100.0 * rssiCounts / RSSI_T_PWM;
+  return (10.24 * pwmRatio - 295) / 17.5;
+}
+
+float getSignalValue(float dBm) {
+  // TODO: implement this after calibration
   return 0.666;
 }
 
