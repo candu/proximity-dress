@@ -5,5 +5,5 @@ void setup() {
 void loop() {
   // every short while, just write a ping to the dress XBee
   Serial.write("!");
-  delay(50);
+  delay(100);
 }
