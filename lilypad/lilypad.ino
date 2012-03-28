@@ -17,7 +17,7 @@
  for XBee:
  
  P0 -> 1   (enable RSSI/PWM)
- RP -> 14  (set how long the RSSI analog signal lasts to 2 seconds)
+ RP -> 5   (set how long the RSSI analog signal lasts;; hex * 100ms)
  
 */
 
@@ -29,8 +29,14 @@ int MIDDLE_LED_PIN = 9;
 int OUTER_LED_PIN = 10;
 int BOARD_LED_PIN = 13;
 
-int RSSI_TIMEOUT = 200;     /* us */
+/**
+ * The PWM cycle length is 8.32 ms, so we wait for approximately three
+ * cycle lengths here. This avoids pulseIn() default behavior which is
+ * to wait (and block!) for up to a second.
+ */
+int RSSI_TIMEOUT = 25000;   /* us */
 int QUANTUM = 20000;        /* us */
+int LOOP_QUANTUM = 500;     /* ms */
 
 int ledPins[] = {INNER_LED_PIN, MIDDLE_LED_PIN, OUTER_LED_PIN, -1};
 int numPins = 0;
@@ -53,19 +59,31 @@ void setup() {
   pinMode(BOARD_LED_PIN, OUTPUT);
 }
 
-void loop() {
-  if (!XBee.available()) {
+void executeLoop() {
+  if (XBee.available() == 0) {
     return;
   }
   char c = char(XBee.read());
-  Serial.println(c);
   if (c != '!') {
     return;
   }
   unsigned long rssiCounts = pulseIn(RSSI_PIN, HIGH, RSSI_TIMEOUT);
-  Serial.println('rssiCounts == ' + rssiCounts);
+  Serial.print("[");
+  Serial.print(millis());
+  Serial.print("] ");
+  Serial.println(rssiCounts);
   float curSignalValue = getSignalValue(rssiCounts);
-  lightThings(curSignalValue);
+  strength =
+      STRENGTH_DECAY * strength +
+      (1.0 - STRENGTH_DECAY) * curSignalValue;
+}
+
+void loop() {
+  unsigned long start = millis();
+  executeLoop();
+  while (millis() - start < LOOP_QUANTUM) {
+    lightThings(strength);
+  }
 }
 
 /**
