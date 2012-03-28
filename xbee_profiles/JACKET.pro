@@ -1,0 +1,12 @@
+XB24-B_ZigBee_1247.mxi
+80
+0
+251
+1247
+0
+[A]ID=BEEF
+[A]DH=0
+[A]DL=FFFF
+[A]NI=JACKET
+[A]P0=1
+[A]RP=14
