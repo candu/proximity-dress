@@ -1,33 +1,17 @@
+/**
+ * Proximity Dress - Lilypad
+ *
+ * @author candu (Evan Stratford)
+ * @author valkyriesavage (Valkyrie Savage)
+ *
+ * Controls the Lilypad and XBee coordinator for Proximity Dress.
+ */
+
 #include <SoftwareSerial.h>
-/*
- XBee Signal Strength Reader
- Context: Arduino (Lilypad)
 
- The hookups:
- 
- XBee +     -> Lilypad +
- XBee -     -> Lilypad -
- XBee TX    -> Lilypad pin 5
- XBee RX    -> Lilypad pin 6
- XBee RSSI  -> Lilypad pin 7
- LED inner  -> Lilypad pin 8
- LED mid    -> Lilypad pin 9
- LED outer  -> Lilypad pin 10
- 
- for XBee:
- 
- P0 -> 1   (enable RSSI/PWM)
- RP -> FF  (RSSI analog signal is always on)
- 
-*/
-
-int RX_FROM_XBEE_PIN = 5;
-int TX_TO_XBEE_PIN = 6;
-int RSSI_PIN = 7;
-int INNER_LED_PIN = 8;
-int MIDDLE_LED_PIN = 9;
-int OUTER_LED_PIN = 10;
-int BOARD_LED_PIN = 13;
+int RX_FROM_XBEE_PIN = 2;
+int TX_TO_XBEE_PIN = 3;
+int RSSI_PIN = 4;
 
 /**
  * The PWM cycle length is 8.32 ms, so we wait for approximately three
@@ -37,30 +21,49 @@ int BOARD_LED_PIN = 13;
 int RSSI_TIMEOUT = 25000;     /* us */
 int RSSI_T_PWM = 8320;        /* us */
 int QUANTUM = 20000;          /* us */
-int LOOP_QUANTUM = 500;       /* ms */
+int LOOP_QUANTUM = 100;       /* ms */
 
 float STRENGTH_DECAY = 0.85;  /* [0, 1] */
 
-int ledPins[] = {INNER_LED_PIN, MIDDLE_LED_PIN, OUTER_LED_PIN, -1};
-int numPins = 0;
+// The LEDs will be lit in this order; see lightThings() below.
+int ledPins[] = {5, 6, 7, 8, 9, 10, 11, 12, 13, -1};
 
-float strength = 0.0;
+// Rolling averaged signal strength
+float strength = 0.0;         /* [0, 1] */
 
+// Inited in setup()
+int numPins;
+float mindBm;
+float maxdBm;
+
+/**
+ * Note that (RX, TX) on the Lilypad MUST be connected to (TX, RX) on the
+ * XBee respectively.
+ */
 SoftwareSerial XBee(RX_FROM_XBEE_PIN, TX_TO_XBEE_PIN);
 
 void setup() {
   Serial.begin(9600);
   XBee.begin(9600);
   
+  pinMode(RX_FROM_XBEE_PIN, INPUT);
+  pinMode(TX_TO_XBEE_PIN, OUTPUT);
   pinMode(RSSI_PIN, INPUT);
- 
+  
   for (numPins = 0; ledPins[numPins] != -1; numPins++) {
     pinMode(ledPins[numPins], OUTPUT);
   }
-
-  pinMode(BOARD_LED_PIN, OUTPUT);
+  
+  // NOTE: maximum duty cycle is actually 95%, but we don't care
+  mindBm = dBm(0);            // -16.86 dBm
+  maxdBm = dBm(RSSI_T_PWM);   // 41.66 dbm
 }
 
+/**
+ * Prints some debug output across Serial. You can attach to the serial
+ * port over USB to read this data; XBee communication uses SoftwareSerial
+ * instead.
+ */
 void debugRssi(
     unsigned long rssiCounts,
     float curdBm,
@@ -79,6 +82,17 @@ void debugRssi(
   Serial.println(")");
 }
 
+/**
+ * This does the work of fetching a '!' from the XBee UART RX buffer, then
+ * reading the RSSI PWM signal using pulseIn() and mapping that to a
+ * normalized signal strength value on [0, 1]. 0 means turn off all lights;
+ * 1 means turn on all lights.
+ * 
+ * To reduce the effect of random noise, we smooth this raw signal strength
+ * value by using a rolling exponential average (see STRENGTH_DECAY above.)
+ *
+ * Returns true iff '!' was read during this loop iteration.
+ */
 boolean executeLoop() {
   if (XBee.available() == 0) {
     return false;
@@ -97,14 +111,14 @@ boolean executeLoop() {
   return true;
 }
 
+/**
+ * We use loop() here to perform poll-rate limiting while maintaining the
+ * PWM on our LEDs. LOOP_QUANTUM is kept relatively low so we have a good
+ * chance of receiving the RSSI PWM signal within its 500 ms duration.
+ */
 void loop() {
   unsigned long start = millis();
   boolean receivedPing = executeLoop();
-  if (receivedPing) {
-    digitalWrite(BOARD_LED_PIN, HIGH);
-  } else {
-    digitalWrite(BOARD_LED_PIN, LOW); 
-  }
   while (millis() - start < LOOP_QUANTUM) {
     lightThings(strength);
   }
@@ -112,21 +126,25 @@ void loop() {
 
 /**
  * According to the Arduino docs, delayMicroseconds() is inaccurate for
- * large input values. We work around that by using delay() as well.
+ * large input values. We work around that by using delay() and
+ * delayMicroseconds() in tandem.
  */
 void microDelay(int us) {
   delay(us / 1000);
   delayMicroseconds(us % 1000);
 }
 
+/**
+ * See http://asasni.cs.up.ac.za/images/d/df/PWM_GJL_vr1.pdf
+ * for details.
+ */
 float dBm(unsigned long rssiCounts) {
   float pwmRatio = 100.0 * rssiCounts / RSSI_T_PWM;
   return (10.24 * pwmRatio - 295) / 17.5;
 }
 
-float getSignalValue(float dBm) {
-  // TODO: implement this after calibration
-  return 0.666;
+float getSignalValue(float curdBm) {
+  return (curdBm - mindBm) / (maxdBm - mindBm);
 }
 
 /**
@@ -136,7 +154,7 @@ float getSignalValue(float dBm) {
  */
 void lightThings(float strength) {
   float numPinsToLight = numPins * strength;
-  int numFullPins = int(numPinsToLight);
+  int numFullPins = min(numFullPins - 1, int(numPinsToLight));
   float lastPinBrightness = numPinsToLight - numFullPins;
   int i = 0;
   for (; i < numFullPins; i++) {
@@ -149,6 +167,9 @@ void lightThings(float strength) {
   }
 }
 
+/**
+ * PWMs a single LED at the specified brightness (duty cycle).
+ */
 void pwm(int pin, float brightness) {
   int pulseOn = int(QUANTUM * brightness);
   int pulseOff = QUANTUM - pulseOn;

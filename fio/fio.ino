@@ -1,3 +1,12 @@
+/**
+ * Proximity Dress - Fio
+ *
+ * @author candu (Evan Stratford)
+ * @author valkyriesavage (Valkyrie Savage)
+ *
+ * Controls the Fio and XBee router for Proximity Dress.
+ */
+
 int BOARD_LED_PIN = 13;
 
 void setup() {
@@ -6,12 +15,20 @@ void setup() {
   pinMode(BOARD_LED_PIN, OUTPUT);
 }
 
+/**
+ * Write out a '!' over XBee serial to be received by the XBee coordinator
+ * connected to the Lilypad. Pinging forces the XBee RSSI pin to be set when
+ * data is received; we then use that to read off the signal strength on the
+ * Lilypad end.
+ */
 void ping() {
-  // every short while, just write a ping to the dress XBee
-  Serial.write("!");
+  Serial.write('!');
   Serial.flush();
 }
 
+/**
+ * Kill time while providing visual feedback that yes, we are sending data.
+ */
 void ledBlink() {
    digitalWrite(BOARD_LED_PIN, HIGH);
    delay(500);
