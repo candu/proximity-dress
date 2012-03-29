@@ -46,8 +46,6 @@ void setup() {
   Serial.begin(9600);
   XBee.begin(9600);
   
-  pinMode(RX_FROM_XBEE_PIN, INPUT);
-  pinMode(TX_TO_XBEE_PIN, OUTPUT);
   pinMode(RSSI_PIN, INPUT);
   
   for (numPins = 0; ledPins[numPins] != -1; numPins++) {
@@ -143,6 +141,9 @@ float dBm(unsigned long rssiCounts) {
   return (10.24 * pwmRatio - 295) / 17.5;
 }
 
+/**
+ * Normalize the current dBm value to [0, 1].
+ */
 float getSignalValue(float curdBm) {
   return (curdBm - mindBm) / (maxdBm - mindBm);
 }
